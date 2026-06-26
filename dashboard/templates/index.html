@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Virtual TSN Switch Dashboard</title>
+<style>
+  :root{--bg:#0d1117;--surface:#161b22;--surface2:#21262d;--border:#30363d;--text:#e6edf3;--muted:#8b949e;--green:#3fb950;--yellow:#d29922;--red:#f85149;--blue:#58a6ff;--purple:#bc8cff;--tc0:#58a6ff;--tc1:#3fb950;--tc2:#d29922;--tc3:#f85149;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;font-size:13px;}
+  header{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 20px;display:flex;align-items:center;justify-content:space-between;}
+  header h1{font-size:17px;font-weight:600;color:var(--blue);display:flex;align-items:center;gap:10px;}
+  header img{height:28px;}
+  .right{display:flex;gap:14px;align-items:center;}
+  .badge{padding:2px 9px;border-radius:20px;font-size:11px;font-weight:600;}
+  .badge-green{background:rgba(63,185,80,.15);color:var(--green);border:1px solid rgba(63,185,80,.4);}
+  .badge-red{background:rgba(248,81,73,.15);color:var(--red);border:1px solid rgba(248,81,73,.4);}
+  .badge-yellow{background:rgba(210,153,34,.15);color:var(--yellow);border:1px solid rgba(210,153,34,.4);}
+  a.logout{color:var(--muted);text-decoration:none;font-size:12px;}
+
+  .layout{display:grid;grid-template-columns:1fr 480px;height:calc(100vh - 49px);overflow:hidden;}
+  .main{overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px;}
+  .sidebar{border-left:1px solid var(--border);overflow-y:auto;background:var(--surface);}
+
+  .sec{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:8px;}
+  .nodes-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;}
+  .node-card{background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:12px;position:relative;}
+  .node-card .role{font-size:10px;text-transform:uppercase;color:var(--muted);margin-bottom:3px;}
+  .node-card .name{font-size:14px;font-weight:600;margin-bottom:2px;}
+  .node-card .ip{font-size:11px;color:var(--muted);margin-bottom:8px;font-family:monospace;}
+  .node-card .offset{font-size:20px;font-weight:700;}
+  .node-card .offset-label{font-size:10px;color:var(--muted);}
+  .sdot{width:7px;height:7px;border-radius:50%;position:absolute;top:12px;right:12px;}
+  .sdot.synced{background:var(--green);box-shadow:0 0 5px var(--green);}
+  .sdot.drifting{background:var(--yellow);}
+  .sdot.lost,.sdot.offline,.sdot.unknown{background:var(--muted);}
+
+  /* Port tabs */
+  .port-tabs{display:flex;border-bottom:1px solid var(--border);background:var(--surface2);}
+  .port-tab{padding:9px 16px;font-size:12px;font-weight:600;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;}
+  .port-tab.active{color:var(--blue);border-bottom-color:var(--blue);}
+  .port-panel{display:none;padding:14px;}
+  .port-panel.active{display:block;}
+
+  /* Sub-tabs inside port panel */
+  .sub-tabs{display:flex;gap:4px;margin-bottom:12px;}
+  .sub-tab{padding:4px 12px;font-size:11px;font-weight:600;cursor:pointer;border-radius:4px;color:var(--muted);background:var(--surface2);}
+  .sub-tab.active{background:var(--blue);color:#000;}
+  .sub-panel{display:none;}
+  .sub-panel.active{display:block;}
+
+  /* Gate bar */
+  .gate-bar{display:flex;gap:5px;margin-bottom:10px;}
+  .gl{flex:1;border-radius:4px;padding:7px 4px;text-align:center;font-size:10px;font-weight:700;transition:opacity .3s;}
+  .gl.open{opacity:1;} .gl.closed{opacity:.22;}
+  .gl.tc0{background:rgba(88,166,255,.2);color:var(--tc0);border:1px solid var(--tc0);}
+  .gl.tc1{background:rgba(63,185,80,.2);color:var(--tc1);border:1px solid var(--tc1);}
+  .gl.tc2{background:rgba(210,153,34,.2);color:var(--tc2);border:1px solid var(--tc2);}
+  .gl.tc3{background:rgba(248,81,73,.2);color:var(--tc3);border:1px solid var(--tc3);}
+  .gl .gn{font-size:8px;font-weight:400;margin-top:1px;opacity:.8;}
+
+  /* Credit bars (CBS) */
+  .credit-bars{display:flex;flex-direction:column;gap:6px;margin-bottom:12px;}
+  .credit-row{display:flex;align-items:center;gap:8px;}
+  .credit-label{font-size:11px;color:var(--muted);width:80px;flex-shrink:0;}
+  .credit-track{flex:1;background:var(--surface2);border-radius:3px;height:14px;overflow:hidden;position:relative;}
+  .credit-fill{height:100%;border-radius:3px;transition:width .2s;}
+  .credit-fill.tc0{background:var(--tc0);}
+  .credit-fill.tc1{background:var(--tc1);}
+  .credit-fill.tc2{background:var(--tc2);}
+  .credit-fill.tc3{background:var(--tc3);}
+  .credit-fill.negative{background:var(--red);}
+  .credit-val{font-size:10px;font-family:monospace;width:55px;text-align:right;color:var(--muted);}
+
+  .cycle-track{background:var(--surface2);border-radius:3px;height:5px;overflow:hidden;margin-bottom:12px;}
+  .cycle-fill{height:100%;background:linear-gradient(90deg,var(--blue),var(--purple));border-radius:3px;transition:width .1s linear;}
+
+  .stats-table{width:100%;border-collapse:collapse;font-size:11px;margin-bottom:12px;}
+  .stats-table th{text-align:left;color:var(--muted);font-weight:500;padding:3px 5px;font-size:10px;text-transform:uppercase;}
+  .stats-table td{padding:3px 5px;border-top:1px solid var(--border);}
+  .stats-table td.num{font-family:monospace;text-align:right;}
+  .tcd{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:4px;}
+  .tcd.tc0{background:var(--tc0);} .tcd.tc1{background:var(--tc1);}
+  .tcd.tc2{background:var(--tc2);} .tcd.tc3{background:var(--tc3);}
+
+  hr.div{border:none;border-top:1px solid var(--border);margin:12px 0;}
+
+  /* Editors */
+  .toggle-row{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+  .toggle{width:32px;height:17px;background:var(--border);border-radius:9px;position:relative;cursor:pointer;transition:background .2s;}
+  .toggle.on{background:var(--green);}
+  .toggle::after{content:'';width:11px;height:11px;background:#fff;border-radius:50%;position:absolute;top:3px;left:3px;transition:left .2s;}
+  .toggle.on::after{left:18px;}
+  .field-row{display:flex;gap:8px;align-items:center;margin-bottom:6px;}
+  .field-row label{font-size:11px;color:var(--muted);min-width:90px;}
+  .field-row input[type=number]{background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:3px 7px;font-size:12px;width:100px;}
+  .field-row input:focus{outline:none;border-color:var(--blue);}
+  .gcl-entry{background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:9px;margin-bottom:7px;}
+  .gcl-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;}
+  .gcl-num{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;}
+  .btn-rm{background:rgba(248,81,73,.15);color:var(--red);border:1px solid rgba(248,81,73,.3);border-radius:4px;padding:2px 6px;font-size:11px;cursor:pointer;}
+  .gates-toggle{display:flex;gap:4px;}
+  .gt{padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid transparent;}
+  .gt.on.tc0{background:rgba(88,166,255,.25);color:var(--tc0);border-color:var(--tc0);}
+  .gt.on.tc1{background:rgba(63,185,80,.25);color:var(--tc1);border-color:var(--tc1);}
+  .gt.on.tc2{background:rgba(210,153,34,.25);color:var(--tc2);border-color:var(--tc2);}
+  .gt.on.tc3{background:rgba(248,81,73,.25);color:var(--tc3);border-color:var(--tc3);}
+  .gt.off{background:var(--surface);color:var(--muted);border-color:var(--border);}
+  .dur-bar{height:3px;border-radius:2px;margin-top:5px;background:var(--blue);opacity:.6;}
+  .btn{padding:6px 13px;border-radius:5px;font-size:12px;font-weight:600;cursor:pointer;border:none;}
+  .btn-primary{background:var(--blue);color:#000;} .btn-primary:hover{background:#79bcff;}
+  .btn-secondary{background:var(--surface2);color:var(--text);border:1px solid var(--border);}
+  .btn-add{background:rgba(63,185,80,.15);color:var(--green);border:1px solid rgba(63,185,80,.3);}
+  .btn-row{display:flex;gap:7px;margin-top:9px;flex-wrap:wrap;}
+  .vmsg{font-size:11px;margin-top:7px;padding:4px 9px;border-radius:4px;display:none;}
+  .vmsg.ok{background:rgba(63,185,80,.15);color:var(--green);}
+  .vmsg.err{background:rgba(248,81,73,.15);color:var(--red);}
+  .sidebar-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);padding:12px 14px 0;}
+  canvas{width:100%!important;}
+  .no-data{color:var(--muted);font-size:11px;padding:5px 0;}
+
+  /* CBS TC editor rows */
+  .cbs-tc-row{background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:9px;margin-bottom:7px;}
+  .cbs-tc-hdr{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+  .cbs-tc-name{font-size:11px;font-weight:600;}
+</style>
+</head>
+<body>
+<header>
+  <h1>
+    <img src="/static/logo.png" onerror="this.style.display='none'">
+    ⚡ Virtual TSN Switch
+  </h1>
+  <div class="right">
+    <span id="gm-badge" class="badge badge-red">GM: offline</span>
+    <span id="conn-badge" class="badge badge-yellow">connecting…</span>
+    <a class="logout" href="/logout">Logout</a>
+  </div>
+</header>
+
+<div class="layout">
+  <div class="main">
+    <div><div class="sec">Network Nodes</div><div class="nodes-grid" id="nodes-grid"></div></div>
+    <div><div class="sec">Clock Offset History (ms)</div><canvas id="history-chart" height="100"></canvas></div>
+  </div>
+  <div class="sidebar">
+    <div class="sidebar-title">Shaper Configuration — Per Egress Port</div>
+    <div class="port-tabs" id="port-tabs"></div>
+    <div id="port-panels"></div>
+  </div>
+</div>
+
+<script>
+const TC_NAMES  = ["Best Effort","Background","Exc. Effort","Time Critical"];
+const TC_COLORS = ["#58a6ff","#3fb950","#d29922","#f85149"];
+const portTasConfigs = {}, portCbsConfigs = {};
+let portIds = [], historyData = {}, activePort = null;
+const cycleStartTimes = {};
+
+// ── SSE ──────────────────────────────────────────────────────────────────────
+const es = new EventSource("/api/stream");
+es.onmessage = e => {
+  const d = JSON.parse(e.data);
+  updateBadges(d); updateNodes(d.nodes); updateHistory(d.nodes);
+  if (d.tas_ports || d.cbs_ports) updatePortData(d);
+};
+es.onerror = () => setBadge("conn-badge","disconnected","badge-red");
+es.onopen  = () => setBadge("conn-badge","live","badge-green");
+
+function setBadge(id,txt,cls){const e=document.getElementById(id);e.textContent=txt;e.className="badge "+cls;}
+function updateBadges(d){d.gm_id?setBadge("gm-badge","GM: "+d.gm_id,"badge-green"):setBadge("gm-badge","GM: offline","badge-red");}
+
+function updateNodes(nodes) {
+  const grid = document.getElementById("nodes-grid");
+  Object.values(nodes).forEach(n => {
+    let c = grid.querySelector(`[data-id="${n.node_id}"]`);
+    if (!c) {
+      c = document.createElement("div"); c.className="node-card"; c.dataset.id=n.node_id;
+      c.innerHTML=`<div class="sdot unknown"></div><div class="role"></div><div class="name"></div>
+        <div class="ip"></div><div class="offset"></div><div class="offset-label">clock offset</div>
+        <canvas class="mini-chart" height="28"></canvas>`;
+      grid.appendChild(c);
+    }
+    c.querySelector(".role").textContent = n.role.toUpperCase();
+    c.querySelector(".name").textContent = n.node_id;
+    c.querySelector(".ip").textContent   = n.ip;
+    c.querySelector(".offset").textContent = n.offset_ms!=null ? n.offset_ms.toFixed(2)+" ms":"—";
+    c.querySelector(".sdot").className = "sdot "+(n.status||"unknown");
+    if (n.history&&n.history.length>1) drawSparkline(c.querySelector(".mini-chart"),n.history.map(h=>h.v));
+  });
+}
+
+function drawSparkline(canvas,data){
+  const W=canvas.offsetWidth||180,H=28; canvas.width=W;canvas.height=H;
+  const ctx=canvas.getContext("2d"); ctx.clearRect(0,0,W,H);
+  const mn=Math.min(...data),mx=Math.max(...data),r=mx-mn||1;
+  ctx.strokeStyle="#58a6ff";ctx.lineWidth=1.5;ctx.beginPath();
+  data.forEach((v,i)=>{const x=(i/(data.length-1))*W,y=H-((v-mn)/r)*(H-4)-2;i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);});
+  ctx.stroke();
+}
+
+function updateHistory(nodes){
+  Object.values(nodes).forEach(n=>{if(n.history&&n.history.length)historyData[n.node_id]=n.history;});
+  const canvas=document.getElementById("history-chart");
+  const W=canvas.offsetWidth||500,H=100; canvas.width=W;canvas.height=H;
+  const ctx=canvas.getContext("2d"); ctx.clearRect(0,0,W,H);
+  ctx.strokeStyle="rgba(139,148,158,.15)";ctx.lineWidth=1;
+  [.25,.5,.75].forEach(f=>{ctx.beginPath();ctx.moveTo(0,H*f);ctx.lineTo(W,H*f);ctx.stroke();});
+  Object.values(historyData).forEach((hist,ni)=>{
+    if(hist.length<2)return;const vals=hist.map(h=>h.v);
+    const mn=Math.min(...vals),mx=Math.max(...vals),r=mx-mn||1;
+    ctx.strokeStyle=TC_COLORS[ni%4];ctx.lineWidth=1.5;ctx.beginPath();
+    vals.forEach((v,i)=>{const x=(i/(vals.length-1))*W,y=H-((v-mn)/r)*(H-8)-4;i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);});
+    ctx.stroke();
+  });
+}
+
+// ── Per-port data ─────────────────────────────────────────────────────────────
+function updatePortData(d) {
+  const allPorts = new Set([...Object.keys(d.tas_ports||{}), ...Object.keys(d.cbs_ports||{})]);
+  if (portIds.length===0 && allPorts.size>0) {
+    portIds = [...allPorts];
+    buildTabs();
+    loadAllConfigs();
+  }
+  portIds.forEach(pid => {
+    if (d.tas_ports&&d.tas_ports[pid]) {
+      updateGateBar(pid, d.tas_ports[pid].gates);
+      updateTASStats(pid, d.tas_ports[pid].stats);
+    }
+    if (d.cbs_ports&&d.cbs_ports[pid]) {
+      updateCreditBars(pid, d.cbs_ports[pid].credit);
+      updateCBSStats(pid, d.cbs_ports[pid].stats);
+    }
+  });
+}
+
+function buildTabs() {
+  const tabsEl=document.getElementById("port-tabs");
+  const panelsEl=document.getElementById("port-panels");
+  tabsEl.innerHTML=""; panelsEl.innerHTML="";
+  portIds.forEach((pid,i) => {
+    const tab=document.createElement("div");
+    tab.className="port-tab"+(i===0?" active":"");
+    tab.textContent=pid; tab.dataset.port=pid;
+    tab.onclick=()=>activateTab(pid); tabsEl.appendChild(tab);
+    const panel=document.createElement("div");
+    panel.className="port-panel"+(i===0?" active":"");
+    panel.id="panel-"+pid; panel.innerHTML=buildPanelHTML(pid);
+    panelsEl.appendChild(panel);
+  });
+  activePort=portIds[0];
+}
+
+function activateTab(pid) {
+  activePort=pid;
+  document.querySelectorAll(".port-tab").forEach(t=>t.classList.toggle("active",t.dataset.port===pid));
+  document.querySelectorAll(".port-panel").forEach(p=>p.classList.toggle("active",p.id==="panel-"+pid));
+}
+
+function buildPanelHTML(pid) {
+  return `
+    <div class="sub-tabs">
+      <div class="sub-tab active" id="stab-tas-${pid}" onclick="switchSubTab('${pid}','tas')">TAS</div>
+      <div class="sub-tab" id="stab-cbs-${pid}" onclick="switchSubTab('${pid}','cbs')">CBS</div>
+    </div>
+
+    <!-- TAS sub-panel -->
+    <div class="sub-panel active" id="sp-tas-${pid}">
+      <div class="sec">Live Gate State — ${pid}</div>
+      <div class="gate-bar" id="gates-${pid}">
+        ${[0,1,2,3].map(tc=>`<div class="gl tc${tc} closed" id="gate-${pid}-${tc}">TC${tc}<div class="gn">${TC_NAMES[tc]}</div></div>`).join("")}
+      </div>
+      <div style="font-size:10px;color:var(--muted);margin-bottom:3px;">Cycle position</div>
+      <div class="cycle-track"><div class="cycle-fill" id="cyc-${pid}" style="width:0%"></div></div>
+      <div class="sec">TAS Packet Statistics</div>
+      <table class="stats-table">
+        <thead><tr><th>TC</th><th class="num">Sent</th><th class="num">Queued</th><th class="num">Dropped</th></tr></thead>
+        <tbody id="tas-stats-${pid}"><tr><td colspan="4" class="no-data">Waiting…</td></tr></tbody>
+      </table>
+      <hr class="div">
+      <div class="sec">GCL Configuration — ${pid}</div>
+      <div class="toggle-row">
+        <div class="toggle" id="tas-tog-${pid}" onclick="toggleTAS('${pid}')"></div>
+        <label id="tas-tog-label-${pid}">TAS Enabled</label>
+      </div>
+      <div class="field-row">
+        <label>Cycle (µs)</label>
+        <input type="number" id="cycle-${pid}" min="100" max="1000000" step="100" value="10000" oninput="onCycleInput('${pid}')">
+        <span style="font-size:10px;color:var(--muted)" id="cycle-hint-${pid}"></span>
+      </div>
+      <div id="gcl-${pid}"></div>
+      <div class="btn-row">
+        <button class="btn btn-add" onclick="addGCLEntry('${pid}')">+ Add Window</button>
+        <button class="btn btn-secondary" onclick="loadTASConfig('${pid}')">↺ Reload</button>
+      </div>
+      <div class="vmsg" id="tas-vmsg-${pid}"></div>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="applyTAS('${pid}')">Apply TAS</button>
+        <button class="btn btn-secondary" onclick="resetTAS('${pid}')">Reset Default</button>
+      </div>
+    </div>
+
+    <!-- CBS sub-panel -->
+    <div class="sub-panel" id="sp-cbs-${pid}">
+      <div class="sec">Credit State — ${pid}</div>
+      <div class="credit-bars" id="credit-bars-${pid}">
+        ${[0,1,2,3].map(tc=>`
+          <div class="credit-row">
+            <span class="credit-label"><span class="tcd tc${tc}"></span>TC${tc}</span>
+            <div class="credit-track"><div class="credit-fill tc${tc}" id="credit-fill-${pid}-${tc}" style="width:50%"></div></div>
+            <span class="credit-val" id="credit-val-${pid}-${tc}">—</span>
+          </div>`).join("")}
+      </div>
+      <div class="sec">CBS Packet Statistics</div>
+      <table class="stats-table">
+        <thead><tr><th>TC</th><th class="num">Sent</th><th class="num">Queued</th><th class="num">Dropped</th></tr></thead>
+        <tbody id="cbs-stats-${pid}"><tr><td colspan="4" class="no-data">Waiting…</td></tr></tbody>
+      </table>
+      <hr class="div">
+      <div class="sec">CBS Configuration — ${pid}</div>
+      <div class="toggle-row">
+        <div class="toggle" id="cbs-tog-${pid}" onclick="toggleCBS('${pid}')"></div>
+        <label id="cbs-tog-label-${pid}">CBS Enabled</label>
+      </div>
+      <div class="field-row">
+        <label>Port speed</label>
+        <input type="number" id="speed-${pid}" min="1000000" step="1000000" value="100000000">
+        <span style="font-size:10px;color:var(--muted)">bps</span>
+      </div>
+      <div id="cbs-tcs-${pid}"></div>
+      <div class="vmsg" id="cbs-vmsg-${pid}"></div>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="applyCBS('${pid}')">Apply CBS</button>
+        <button class="btn btn-secondary" onclick="resetCBS('${pid}')">Reset Default</button>
+        <button class="btn btn-secondary" onclick="loadCBSConfig('${pid}')">↺ Reload</button>
+      </div>
+    </div>`;
+}
+
+function switchSubTab(pid, which) {
+  ["tas","cbs"].forEach(w => {
+    document.getElementById(`stab-${w}-${pid}`)?.classList.toggle("active", w===which);
+    document.getElementById(`sp-${w}-${pid}`)?.classList.toggle("active", w===which);
+  });
+}
+
+// ── Live updates ──────────────────────────────────────────────────────────────
+function updateGateBar(pid, gates) {
+  if (!gates) return;
+  for (let tc=0;tc<4;tc++) {
+    const g=gates[String(tc)], el=document.getElementById(`gate-${pid}-${tc}`);
+    if (!el||!g) continue;
+    el.className=`gl tc${tc} ${g.open?"open":"closed"}`;
+    el.innerHTML=`TC${tc}${g.queued>0?` <sup>${g.queued}</sup>`:""}<div class="gn">${TC_NAMES[tc]}</div>`;
+  }
+}
+
+function updateCreditBars(pid, credit) {
+  if (!credit) return;
+  for (let tc=0;tc<4;tc++) {
+    const info=credit[String(tc)]; if (!info) continue;
+    const fill=document.getElementById(`credit-fill-${pid}-${tc}`);
+    const val=document.getElementById(`credit-val-${pid}-${tc}`);
+    if (!fill||!val) continue;
+    const max=info.max_credit||12500;
+    const c=info.credit_bytes||0;
+    const pct=Math.max(0,Math.min(100,(c/max)*100));
+    fill.style.width=pct+"%";
+    fill.className=`credit-fill tc${tc}${c<0?" negative":""}`;
+    val.textContent=c.toFixed(0)+"B";
+  }
+}
+
+function updateTASStats(pid, stats) {
+  const tb=document.getElementById("tas-stats-"+pid); if(!tb||!stats) return;
+  let html="";
+  for(let tc=0;tc<4;tc++){
+    const s=(stats.sent||{})[tc]||0,q=(stats.queued||{})[tc]||0,d=(stats.dropped||{})[tc]||0;
+    html+=`<tr><td><span class="tcd tc${tc}"></span>TC${tc}</td><td class="num">${s}</td><td class="num">${q}</td><td class="num" style="color:${d>0?"var(--red)":"inherit"}">${d}</td></tr>`;
+  }
+  tb.innerHTML=html;
+}
+
+function updateCBSStats(pid, stats) {
+  const tb=document.getElementById("cbs-stats-"+pid); if(!tb||!stats) return;
+  let html="";
+  for(let tc=0;tc<4;tc++){
+    const s=(stats.sent||{})[tc]||0,q=(stats.queued||{})[tc]||0,d=(stats.dropped||{})[tc]||0;
+    html+=`<tr><td><span class="tcd tc${tc}"></span>TC${tc}</td><td class="num">${s}</td><td class="num">${q}</td><td class="num" style="color:${d>0?"var(--red)":"inherit"}">${d}</td></tr>`;
+  }
+  tb.innerHTML=html;
+}
+
+function animateCycles() {
+  portIds.forEach(pid=>{
+    const cfg=portTasConfigs[pid]; if(!cfg) return;
+    const cycleMs=cfg.cycle_us/1000;
+    if(!cycleStartTimes[pid]) cycleStartTimes[pid]=performance.now();
+    const pct=((performance.now()-cycleStartTimes[pid])%cycleMs)/cycleMs*100;
+    const el=document.getElementById("cyc-"+pid); if(el) el.style.width=pct+"%";
+  });
+  requestAnimationFrame(animateCycles);
+}
+animateCycles();
+
+// ── Config loading ────────────────────────────────────────────────────────────
+async function loadAllConfigs() {
+  for (const pid of portIds) {
+    await loadTASConfig(pid);
+    await loadCBSConfig(pid);
+  }
+}
+
+async function loadTASConfig(pid) {
+  const r=await fetch(`/api/tas/${pid}`); if(!r.ok) return;
+  portTasConfigs[pid]=await r.json(); renderTASEditor(pid);
+}
+
+async function loadCBSConfig(pid) {
+  const r=await fetch(`/api/cbs/${pid}`); if(!r.ok) return;
+  portCbsConfigs[pid]=await r.json(); renderCBSEditor(pid);
+}
+
+// ── TAS Editor ────────────────────────────────────────────────────────────────
+function renderTASEditor(pid) {
+  const cfg=portTasConfigs[pid]; if(!cfg) return;
+  document.getElementById("cycle-"+pid).value=cfg.cycle_us;
+  updateCycleHint(pid);
+  const tog=document.getElementById("tas-tog-"+pid);
+  if(tog){tog.className="toggle "+(cfg.enabled?"on":"");document.getElementById("tas-tog-label-"+pid).textContent=cfg.enabled?"TAS Enabled":"TAS Disabled";}
+  renderGCL(pid);
+}
+
+function toggleTAS(pid){if(!portTasConfigs[pid])return;portTasConfigs[pid].enabled=!portTasConfigs[pid].enabled;const tog=document.getElementById("tas-tog-"+pid);tog.className="toggle "+(portTasConfigs[pid].enabled?"on":"");document.getElementById("tas-tog-label-"+pid).textContent=portTasConfigs[pid].enabled?"TAS Enabled":"TAS Disabled";}
+function onCycleInput(pid){if(!portTasConfigs[pid])return;portTasConfigs[pid].cycle_us=parseInt(document.getElementById("cycle-"+pid).value)||10000;updateCycleHint(pid);updateDurBars(pid);}
+function updateCycleHint(pid){const v=parseInt(document.getElementById("cycle-"+pid)?.value)||10000;const el=document.getElementById("cycle-hint-"+pid);if(el)el.textContent=v>=1000?(v/1000)+"ms":v+"µs";}
+
+function renderGCL(pid) {
+  const list=document.getElementById("gcl-"+pid); if(!list) return;
+  list.innerHTML="";
+  (portTasConfigs[pid]?.gcl||[]).forEach((entry,i)=>list.appendChild(buildGCLEntry(pid,entry,i)));
+  updateDurBars(pid);
+}
+
+function buildGCLEntry(pid,entry,idx) {
+  const div=document.createElement("div"); div.className="gcl-entry";
+  const btns=[0,1,2,3].map(tc=>`<button class="gt ${(entry.gates&(1<<tc))?"on":"off"} tc${tc}" id="gt-${pid}-${idx}-${tc}" onclick="toggleGate('${pid}',${idx},${tc})">TC${tc}</button>`).join("");
+  div.innerHTML=`<div class="gcl-hdr"><span class="gcl-num">Window ${idx+1}</span><button class="btn-rm" onclick="removeGCLEntry('${pid}',${idx})">✕</button></div>
+    <div class="field-row"><label>Duration (µs)</label><input type="number" id="dur-${pid}-${idx}" min="1" value="${entry.duration_us}" oninput="updateDur('${pid}',${idx})"><span style="font-size:10px;color:var(--muted)" id="dur-hint-${pid}-${idx}"></span></div>
+    <div class="field-row"><label>Open gates</label><div class="gates-toggle">${btns}</div></div>
+    <div class="dur-bar" id="dur-bar-${pid}-${idx}"></div>`;
+  updateDurHint(pid,idx,entry.duration_us); return div;
+}
+
+function updateDur(pid,idx){const v=parseInt(document.getElementById(`dur-${pid}-${idx}`)?.value)||0;if(portTasConfigs[pid])portTasConfigs[pid].gcl[idx].duration_us=v;updateDurHint(pid,idx,v);updateDurBars(pid);}
+function updateDurHint(pid,idx,v){const el=document.getElementById(`dur-hint-${pid}-${idx}`);if(el)el.textContent=v>=1000?(v/1000).toFixed(1)+"ms":v+"µs";}
+function updateDurBars(pid){const cycle=portTasConfigs[pid]?.cycle_us||1;(portTasConfigs[pid]?.gcl||[]).forEach((e,i)=>{const b=document.getElementById(`dur-bar-${pid}-${i}`);if(b)b.style.width=Math.min(100,(e.duration_us/cycle)*100)+"%";});}
+function toggleGate(pid,idx,tc){if(!portTasConfigs[pid])return;portTasConfigs[pid].gcl[idx].gates^=(1<<tc);const on=!!(portTasConfigs[pid].gcl[idx].gates&(1<<tc));const btn=document.getElementById(`gt-${pid}-${idx}-${tc}`);if(btn)btn.className=`gt ${on?"on":"off"} tc${tc}`;}
+function addGCLEntry(pid){if(!portTasConfigs[pid])return;portTasConfigs[pid].gcl.push({gates:0b0111,duration_us:1000});renderGCL(pid);}
+function removeGCLEntry(pid,idx){if(!portTasConfigs[pid])return;portTasConfigs[pid].gcl.splice(idx,1);renderGCL(pid);}
+
+function collectTAS(pid){const cfg=portTasConfigs[pid];if(!cfg)return null;cfg.cycle_us=parseInt(document.getElementById("cycle-"+pid)?.value)||10000;cfg.gcl.forEach((e,i)=>{const inp=document.getElementById(`dur-${pid}-${i}`);if(inp)e.duration_us=parseInt(inp.value)||0;});return cfg;}
+
+async function applyTAS(pid){
+  const cfg=collectTAS(pid); if(!cfg) return;
+  const total=cfg.gcl.reduce((s,e)=>s+e.duration_us,0);
+  if(total!==cfg.cycle_us){showMsg("tas-vmsg-"+pid,`GCL total ${total}µs ≠ cycle ${cfg.cycle_us}µs`,"err");return;}
+  const r=await fetch(`/api/tas/${pid}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(cfg)});
+  const d=await r.json();
+  if(d.ok){cycleStartTimes[pid]=performance.now();showMsg("tas-vmsg-"+pid,"✓ TAS applied to "+pid,"ok");}
+  else showMsg("tas-vmsg-"+pid,"Error: "+(d.error||d.msg),"err");
+}
+
+async function resetTAS(pid){const r=await fetch(`/api/tas/${pid}/reset`,{method:"POST"});const d=await r.json();if(d.ok){portTasConfigs[pid]=d.config;renderTASEditor(pid);showMsg("tas-vmsg-"+pid,"Reset to default","ok");}}
+
+// ── CBS Editor ────────────────────────────────────────────────────────────────
+function renderCBSEditor(pid) {
+  const cfg=portCbsConfigs[pid]; if(!cfg) return;
+  const tog=document.getElementById("cbs-tog-"+pid);
+  if(tog){tog.className="toggle "+(cfg.enabled?"on":"");document.getElementById("cbs-tog-label-"+pid).textContent=cfg.enabled?"CBS Enabled":"CBS Disabled";}
+  const speedEl=document.getElementById("speed-"+pid); if(speedEl) speedEl.value=cfg.port_speed_bps;
+  renderCBSTCs(pid);
+}
+
+function toggleCBS(pid){if(!portCbsConfigs[pid])return;portCbsConfigs[pid].enabled=!portCbsConfigs[pid].enabled;const tog=document.getElementById("cbs-tog-"+pid);tog.className="toggle "+(portCbsConfigs[pid].enabled?"on":"");document.getElementById("cbs-tog-label-"+pid).textContent=portCbsConfigs[pid].enabled?"CBS Enabled":"CBS Disabled";}
+
+function renderCBSTCs(pid) {
+  const container=document.getElementById("cbs-tcs-"+pid); if(!container) return;
+  const cfg=portCbsConfigs[pid]; if(!cfg) return;
+  container.innerHTML="";
+  for(let tc=0;tc<4;tc++){
+    const tcCfg=cfg.tc_configs?.[String(tc)]||{enabled:false,idle_slope_bps:0,max_credit_bytes:12500};
+    const div=document.createElement("div"); div.className="cbs-tc-row";
+    div.innerHTML=`
+      <div class="cbs-tc-hdr">
+        <span class="tcd tc${tc}"></span>
+        <span class="cbs-tc-name">TC${tc} — ${TC_NAMES[tc]}</span>
+        <div class="toggle" id="cbs-tc-tog-${pid}-${tc}" onclick="toggleCBSTC('${pid}',${tc})" style="margin-left:auto"></div>
+      </div>
+      <div class="field-row"><label>IdleSlope</label><input type="number" id="cbs-idle-${pid}-${tc}" min="0" step="1000000" value="${tcCfg.idle_slope_bps}"><span style="font-size:10px;color:var(--muted)">bps</span></div>
+      <div class="field-row"><label>MaxCredit</label><input type="number" id="cbs-maxc-${pid}-${tc}" min="0" step="1000" value="${tcCfg.max_credit_bytes}"><span style="font-size:10px;color:var(--muted)">bytes</span></div>`;
+    container.appendChild(div);
+    const tog=document.getElementById(`cbs-tc-tog-${pid}-${tc}`);
+    if(tog) tog.className="toggle "+(tcCfg.enabled?"on":"");
+  }
+}
+
+function toggleCBSTC(pid,tc){
+  if(!portCbsConfigs[pid]) return;
+  const key=String(tc);
+  if(!portCbsConfigs[pid].tc_configs) portCbsConfigs[pid].tc_configs={};
+  if(!portCbsConfigs[pid].tc_configs[key]) portCbsConfigs[pid].tc_configs[key]={enabled:false,idle_slope_bps:0,max_credit_bytes:12500};
+  portCbsConfigs[pid].tc_configs[key].enabled=!portCbsConfigs[pid].tc_configs[key].enabled;
+  const tog=document.getElementById(`cbs-tc-tog-${pid}-${tc}`);
+  if(tog) tog.className="toggle "+(portCbsConfigs[pid].tc_configs[key].enabled?"on":"");
+}
+
+function collectCBS(pid){
+  const cfg=portCbsConfigs[pid]; if(!cfg) return null;
+  cfg.port_speed_bps=parseInt(document.getElementById("speed-"+pid)?.value)||100000000;
+  if(!cfg.tc_configs) cfg.tc_configs={};
+  for(let tc=0;tc<4;tc++){
+    const key=String(tc);
+    if(!cfg.tc_configs[key]) cfg.tc_configs[key]={enabled:false,idle_slope_bps:0,max_credit_bytes:12500};
+    cfg.tc_configs[key].idle_slope_bps=parseInt(document.getElementById(`cbs-idle-${pid}-${tc}`)?.value)||0;
+    cfg.tc_configs[key].max_credit_bytes=parseInt(document.getElementById(`cbs-maxc-${pid}-${tc}`)?.value)||12500;
+  }
+  return cfg;
+}
+
+async function applyCBS(pid){
+  const cfg=collectCBS(pid); if(!cfg) return;
+  const r=await fetch(`/api/cbs/${pid}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(cfg)});
+  const d=await r.json();
+  if(d.ok) showMsg("cbs-vmsg-"+pid,"✓ CBS applied to "+pid,"ok");
+  else showMsg("cbs-vmsg-"+pid,"Error: "+(d.error||d.msg),"err");
+}
+
+async function resetCBS(pid){const r=await fetch(`/api/cbs/${pid}/reset`,{method:"POST"});const d=await r.json();if(d.ok){portCbsConfigs[pid]=d.config;renderCBSEditor(pid);showMsg("cbs-vmsg-"+pid,"Reset to default","ok");}}
+
+function showMsg(id,text,type){const el=document.getElementById(id);if(!el)return;el.textContent=text;el.className="vmsg "+type;el.style.display="block";setTimeout(()=>el.style.display="none",3000);}
+</script>
+</body>
+</html>
