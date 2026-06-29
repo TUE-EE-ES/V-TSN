@@ -7,7 +7,7 @@ V-TSN: A Software-Defined TSN Overlay for General-Purpose Networks
 # 🔬 Reference
 
 If you use this work, please cite:
-M. Karimi, M. Nabi, A. Khalaf, A. Nelson, K. Goossens, and T. Basten, "V-TSN: A Software-Defined TSN Overlay for General-Purpose Networks," arXiv preprint arXiv:2606.28285, Jun. 2026.
+M. Karimi, M. Nabi, A. Khalaf, A. Nelson, K. Goossens, and T. Basten, "V-TSN: A Software-Defined TSN Overlay for General-Purpose Networks," arXiv, arXiv:2606.28285 [cs.NI], Jun. 2026. Available online: https://arxiv.org/abs/2606.28285
 
 
 
